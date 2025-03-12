@@ -60,37 +60,43 @@ ui <- fluidPage(
                fluidRow(
                  column(12, 
                         h3("Temperature Analysis"),
-                        plotOutput("temperaturePlot")
+                        plotOutput("temperaturePlot"),
+                        verbatimTextOutput("temperatureSummary")
                  )
                ),
                fluidRow(
                  column(12, 
                         h3("Precipitation Analysis"),
-                        plotOutput("precipitationPlot")
+                        plotOutput("precipitationPlot"),
+                        verbatimTextOutput("precipitationSummary")
                  )
                ),
                fluidRow(
                  column(12, 
                         h3("Wind Analysis"),
-                        plotOutput("windPlot")
+                        plotOutput("windPlot"),
+                        verbatimTextOutput("windSummary")
                  )
                ),
                fluidRow(
                  column(12, 
                         h3("Wind Direction Analysis"),
-                        plotOutput("windRosePlot")
+                        plotOutput("windRosePlot"),
+                        verbatimTextOutput("windRoseSummary")
                  )
                ),
                fluidRow(
                  column(12, 
                         h3("Sunshine Analysis"),
-                        plotOutput("sunlightPlot")
+                        plotOutput("sunlightPlot"),
+                        verbatimTextOutput("sunlightSummary")
                  )
                ),
                fluidRow(
                  column(12, 
                         h3("Radiaation/Evapotranspiration Analysis"),
-                        plotOutput("radiationEvapPlot")
+                        plotOutput("radiationEvapPlot"),
+                        verbatimTextOutput("radiationEvapSummary")
                  )
                ),
       )
@@ -411,6 +417,112 @@ server <- function(input, output, session) {
            legend = c("Shortwave Radiation", "Evapotranspiration"),
            col = c("orange", "blue"), 
            lty = 1, lwd = 2)
+  })
+  
+  
+  output$temperatureSummary <- renderPrint({
+    req(climate_df())
+    df <- climate_df()
+    
+    temp_summary <- df %>%
+      summarise(
+        avg_max = mean(temperature_2m_max, na.rm = TRUE),
+        avg_min = mean(temperature_2m_min, na.rm = TRUE),
+        avg_mean = mean(temperature_2m_mean, na.rm = TRUE),
+        max_temp = max(temperature_2m_max, na.rm = TRUE),
+        min_temp = min(temperature_2m_min, na.rm = TRUE)
+      )
+    
+    print(temp_summary)
+  })
+  
+  output$precipitationSummary <- renderPrint({
+    req(climate_df())
+    df <- climate_df()
+    
+    precip_summary <- df %>%
+      summarise(
+        total_precip = sum(precipitation_sum, na.rm = TRUE),
+        avg_daily_precip = mean(precipitation_sum, na.rm = TRUE),
+        max_daily_precip = max(precipitation_sum, na.rm = TRUE),
+        total_rain = sum(rain_sum, na.rm = TRUE),
+        total_snow = sum(snowfall_sum, na.rm = TRUE)
+      )
+    
+    print(precip_summary)
+  })
+  
+  output$windSummary <- renderPrint({
+    req(climate_df())
+    df <- climate_df()
+    
+    wind_summary <- df %>%
+      summarise(
+        avg_wind_speed = mean(wind_speed_10m_max, na.rm = TRUE),
+        max_wind_speed = max(wind_speed_10m_max, na.rm = TRUE),
+        avg_wind_gusts = mean(wind_gusts_10m_max, na.rm = TRUE),
+        max_wind_gusts = max(wind_gusts_10m_max, na.rm = TRUE)
+      )
+    
+    print(wind_summary)
+  })
+  
+  output$windDirectionSummary <- renderPrint({
+    req(climate_df())
+    df <- climate_df()
+    
+    # Create wind direction categories
+    direction_labels <- c("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+    df$direction_category <- cut(df$wind_direction_10m_dominant, 
+                                 breaks = seq(0, 360, by = 45), 
+                                 labels = direction_labels,
+                                 include.lowest = TRUE)
+    
+    wind_dir_summary <- df %>%
+      group_by(direction_category) %>%
+      summarise(
+        count = n(),
+        percent = n() / nrow(df) * 100,
+        avg_speed = mean(wind_speed_10m_max, na.rm = TRUE)
+      ) %>%
+      arrange(desc(count))
+    
+    print(wind_dir_summary)
+  })
+  
+  output$sunlightSummary <- renderPrint({
+    req(climate_df())
+    df <- climate_df()
+    
+    sunlight_summary <- df %>%
+      summarise(
+        avg_daylight = mean(daylight_duration/3600, na.rm = TRUE),
+        max_daylight = max(daylight_duration/3600, na.rm = TRUE),
+        min_daylight = min(daylight_duration/3600, na.rm = TRUE),
+        avg_sunshine = mean(sunshine_duration/3600, na.rm = TRUE),
+        max_sunshine = max(sunshine_duration/3600, na.rm = TRUE),
+        min_sunshine = min(sunshine_duration/3600, na.rm = TRUE)
+      )
+    
+    print(sunlight_summary)
+  })
+  
+  output$radiationEvapSummary <- renderPrint({
+    req(climate_df())
+    df <- climate_df()
+    
+    radiation_evap_summary <- df %>%
+      summarise(
+        avg_radiation = mean(shortwave_radiation_sum, na.rm = TRUE),
+        max_radiation = max(shortwave_radiation_sum, na.rm = TRUE),
+        min_radiation = min(shortwave_radiation_sum, na.rm = TRUE),
+        avg_evapotranspiration = mean(et0_fao_evapotranspiration, na.rm = TRUE),
+        max_evapotranspiration = max(et0_fao_evapotranspiration, na.rm = TRUE),
+        min_evapotranspiration = min(et0_fao_evapotranspiration, na.rm = TRUE),
+        total_evapotranspiration = sum(et0_fao_evapotranspiration, na.rm = TRUE)
+      )
+    
+    print(radiation_evap_summary)
   })
   
 }
