@@ -4,6 +4,7 @@ library(ggplot2)
 library(tidyr)
 library(dplyr)
 library(shiny)
+library(leaflet)
 
 ui <- fluidPage(
   titlePanel("Climate and Air Quality Analysis Dashboard"),
@@ -11,8 +12,12 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       h4("Location Settings"),
-      numericInput("latitude", "Latitude:", value = 23, min = -90, max = 90, step = 0.1),
-      numericInput("longitude", "Longitude:", value = 25, min = -180, max = 180, step = 0.1),
+      #numericInput("latitude", "Latitude:", value = 23, min = -90, max = 90, step = 0.1),
+      #numericInput("longitude", "Longitude:", value = 25, min = -180, max = 180, step = 0.1),
+      h4("Select Location on Map"),
+      leafletOutput("inputMap", height = "300px"),
+      verbatimTextOutput("selectedLocation"),
+      
       
       h4("Time Period"),
       dateRangeInput("dateRange", "Date Range:",
@@ -95,12 +100,15 @@ server <- function(input, output, session) {
 
   climate_data <- reactiveVal(NULL)
   airquality_data <- reactiveVal(NULL)
-
+  selected_location <- reactiveVal(c(23, 25))
+  
   climate_url <- reactive({
     req(input$tempVariables)
     
-    lat <- input$latitude
-    lon <- input$longitude
+    #lat <- input$latitude
+    #lon <- input$longitude
+    lat <- selected_location()[1]
+    lon <- selected_location()[2]
     start_date <- format(input$dateRange[1], "%Y-%m-%d")
     end_date <- format(input$dateRange[2], "%Y-%m-%d")
     daily_vars <- paste(input$tempVariables, collapse = ",")
@@ -120,8 +128,10 @@ server <- function(input, output, session) {
   airquality_url <- reactive({
     req(input$airVariables)
     
-    lat <- input$latitude
-    lon <- input$longitude
+    #lat <- input$latitude
+    #lon <- input$longitude
+    lat <- selected_location()[1]
+    lon <- selected_location()[2]
     start_date <- format(input$dateRange[1], "%Y-%m-%d")
     end_date <- format(input$dateRange[2], "%Y-%m-%d")
     hourly_vars <- paste(input$airVariables, collapse = ",")
@@ -144,6 +154,31 @@ server <- function(input, output, session) {
       "&domains=cams_global"
     )
   })
+  
+  ###
+  output$inputMap <- renderLeaflet({
+    leaflet() %>%
+      addTiles() %>%  # Add default OpenStreetMap tiles
+      addMarkers(lng = selected_location()[2], lat = selected_location()[1], 
+                 layerId = "selectedMarker") %>%
+      setView(lng = selected_location()[2], lat = selected_location()[1], zoom = 2)
+  })
+  observeEvent(input$inputMap_click, {
+    click <- input$inputMap_click
+    selected_location(c(click$lat, click$lng))
+    
+    # Update marker position
+    leafletProxy("inputMap") %>%
+      clearMarkers() %>%
+      addMarkers(lng = click$lng, lat = click$lat, layerId = "selectedMarker")
+  })
+  
+  # Display selected coordinates
+  output$selectedLocation <- renderText({
+    paste("Selected Location - Latitude:", round(selected_location()[1], 4), 
+          "Longitude:", round(selected_location()[2], 4))
+  })
+  ###
   
   # Display the URLs
   output$climateUrl <- renderText({
