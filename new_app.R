@@ -81,6 +81,18 @@ ui <- fluidPage(
                         plotOutput("windRosePlot")
                  )
                ),
+               fluidRow(
+                 column(12, 
+                        h3("Sunshine Analysis"),
+                        plotOutput("sunlightPlot")
+                 )
+               ),
+               fluidRow(
+                 column(12, 
+                        h3("Radiaation/Evapotranspiration Analysis"),
+                        plotOutput("radiationEvapPlot")
+                 )
+               ),
       )
     )
   )
@@ -334,6 +346,71 @@ server <- function(input, output, session) {
         axis.title = element_blank(),
         legend.position = "bottom"
       )
+  })
+  
+  output$sunlightPlot <- renderPlot({
+    req(climate_df())
+    df <- climate_df()
+    
+    sunlight_data <- df %>%
+      select(time, daylight_duration, sunshine_duration) %>%
+      mutate(
+        daylight_hours = daylight_duration / 3600,
+        sunshine_hours = sunshine_duration / 3600
+      ) %>%
+      select(time, daylight_hours, sunshine_hours) %>%
+      pivot_longer(
+        cols = c("daylight_hours", "sunshine_hours"),
+        names_to = "type",
+        values_to = "hours"
+      ) %>%
+      mutate(type = factor(type, 
+                           levels = c("daylight_hours", "sunshine_hours"),
+                           labels = c("Daylight", "Sunshine")))
+    
+    ggplot(sunlight_data, aes(x = time, y = hours, color = type)) +
+      geom_line(linewidth = 0.8) +
+      scale_color_manual(values = c("Daylight" = "#FFA500", "Sunshine" = "#FFD700")) +
+      labs(
+        title = "Daylight and Sunshine Duration",
+        x = "Date",
+        y = "Hours",
+        color = ""
+      ) +
+      theme_minimal() +
+      theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        legend.position = "bottom",
+        axis.text.x = element_text(angle = 45, hjust = 1)
+      )
+  })
+  
+  output$radiationEvapPlot <- renderPlot({
+    req(climate_df())
+    df <- climate_df()
+    
+    # Create plot with two y-axes
+    par(mar = c(5, 5, 4, 5))
+    
+    # Plot radiation
+    plot(df$time, df$shortwave_radiation_sum, 
+         type = "l", col = "orange", lwd = 2,
+         xlab = "Date", ylab = "Shortwave Radiation (MJ/m²)",
+         main = "Radiation and Evapotranspiration")
+    
+    # Add second y-axis for evapotranspiration
+    par(new = TRUE)
+    plot(df$time, df$et0_fao_evapotranspiration, 
+         type = "l", col = "blue", lwd = 2,
+         xaxt = "n", yaxt = "n", xlab = "", ylab = "")
+    axis(side = 4)
+    mtext("Evapotranspiration (mm)", side = 4, line = 3)
+    
+    # Add legend
+    legend("topleft", 
+           legend = c("Shortwave Radiation", "Evapotranspiration"),
+           col = c("orange", "blue"), 
+           lty = 1, lwd = 2)
   })
   
 }
