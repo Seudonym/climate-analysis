@@ -1,0 +1,193 @@
+---
+title: "Climate Analysis"
+author: "H. Wahid Khan, Vaibhav Kanodia"
+date: "2025-03-09"
+runtime: shiny
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Imports
+We being by importing the necessary libraries.
+```{r}
+library(httr)
+library(jsonlite)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(shiny)
+```
+
+## Data Acquisition
+We make a helper function that:
+1. Takes URL as input
+2. Sends a GET request and parses the resulting JSON
+3. Returns the parsed data
+```{r}
+get_data <- function(url) {
+  encoded_url <- URLencode(url)
+  response <- GET(encoded_url)
+
+  if (http_status(response)$category == "Success") {
+    json_data <- content(response, "text", encoding = "UTF-8")
+    data <- fromJSON(json_data, flatten = TRUE)
+    print(names(data))
+  } else {
+    print(paste("API request failed with status code:", http_status(response)$status_code))
+    print(http_status(response)$reason) 
+  }
+  
+  return(data)
+}
+```
+
+We are using Open-Meteo's API for climate and air quality. These are test URLs that we gathered from their website frontend.
+Later on, we will make these URLs and their parameters modifiable from the UI.
+```{r}
+climate_url <- "https://archive-api.open-meteo.com/v1/archive?latitude=23&longitude=25&start_date=1980-01-01&end_date=2025-01-01&hourly=apparent_temperature&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_sum"
+airquality_url <- "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=25&longitude=77&hourly=carbon_monoxide,carbon_dioxide,nitrogen_dioxide,sulphur_dioxide,methane&timezone=GMT&start_date=2013-01-01&end_date=2025-01-01&domains=cams_global"
+```
+
+Fetch the data from both the APIs.
+```{r}
+climate_data <- get_data(climate_url)
+airquality_data <- get_data(airquality_url)
+```
+
+## Data Cleaning and Transformation
+Here we take the previously acquired data and organize it into data frames. 
+We have chosen to not handle NAs for air quality here, and instead handled it in the UI during rendering. By doing this we can make sure that all of the data is available to pick and choose from the UI.
+```{r}
+temp_max <- climate_data$daily$temperature_2m_max
+temp_min <- climate_data$daily$temperature_2m_min
+temp_mean <- climate_data$daily$temperature_2m_mean
+date <- as.Date(climate_data$daily$time)
+
+temp_df <- data.frame(
+  date,
+  temp_min,
+  temp_mean,
+  temp_max
+)
+
+co <- airquality_data$hourly$carbon_monoxide
+ch4 <- airquality_data$hourly$methane
+co2 <- airquality_data$hourly$carbon_dioxide
+no2 <- airquality_data$hourly$nitrogen_dioxide
+so2 <- airquality_data$hourly$sulphur_dioxide
+date <- as.Date(airquality_data$hourly$time)
+
+airquality_df <- data.frame(
+  date,
+  co,
+  ch4,
+  co2,
+  no2,
+  so2
+)
+
+airquality_df <- airquality_df[seq(1, nrow(airquality_df), 24), ]
+```
+
+Furthermore, the API only provides hourly data for air quality, so we are sampling every 24th data point to get daily data.
+
+## Data Analysis
+### Climate Analysis
+For analyzing climate, we can take a look at the time series decomposition of the temperature, with a frequency of 365 (one year). This will help us visualize trends and seasonal patterns in the data better.
+
+By using ggplot2, we are visualizing this decomposition.
+```{r}
+temp_ts <- ts(temp_df$temp_max, frequency = 365)
+decomp_result <- stats::decompose(temp_ts)
+trend_component <- decomp_result$trend
+seasonal_component <- decomp_result$seasonal
+remainder_component <- decomp_result$random
+
+decomp_df <- data.frame(
+  date = temp_df$date[1:length(temp_ts)],
+  observed = as.numeric(temp_ts),
+  trend = as.numeric(trend_component),
+  seasonal = as.numeric(seasonal_component),
+  remainder = as.numeric(remainder_component)
+)
+
+decomp_df <- decomp_df %>% 
+  filter(!is.na(trend))
+
+decomp_long <- decomp_df %>%
+  pivot_longer(cols = c(observed, trend, seasonal, remainder),
+               names_to = "component", 
+               values_to = "value")
+
+ggplot(decomp_long, aes(x = date, y = value)) +
+  geom_line(color = "orange") +
+  facet_wrap(~ component, scales = "free_y", ncol = 1) +
+  labs(title = "Decomposition of Temperature Time Series",
+       x = "Date",
+       y = "Temperature (°C)") +
+  theme_minimal() +
+  theme(
+    strip.background = element_rect(fill = "lightgray"),
+    strip.text = element_text(face = "bold")
+  )
+```
+
+We are using a bar chart to visualize the temperature as a time series dataset.
+```{r}
+temperature_data_long <- pivot_longer(
+  temp_df,
+  cols = c(temp_min, temp_max, temp_mean),
+  names_to = "temperature_type",
+  values_to = "temperature"
+)
+ggplot(temperature_data_long, aes(x = date, y = temperature, fill = temperature_type)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), width = 0.8) +
+  labs(
+    title = "Temperature Trends Over Time",
+    x = "Date",
+    y = "Temperature (°C)",
+    fill = "Temperature Type"
+  ) +
+  scale_fill_manual(values = c("temp_min" = "blue", "temp_max" = "orange", "temp_mean" = "green")) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_line(color = "gray90"),
+    legend.position = "top",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+```
+
+### Air quality analysis
+And for the air quality analysis, we are again using line plots to visualize the data as a time series dataset.
+```{r}
+airquality_long <- pivot_longer(
+  airquality_df,
+  cols = c(co, co2, ch4, no2, so2),
+  names_to = "pollutant_type",
+  values_to = "concentration"
+)
+ggplot(airquality_long, aes(x = date, y = concentration, color = pollutant_type, group = pollutant_type)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(
+    title = "Air Pollutant Concentrations Over Time",
+    x = "Date",
+    y = "Concentration",
+    color = "Pollutant Type"
+  ) +
+  scale_color_manual(values = c("co" = "red", "co2" = "pink", ch4 = "purple", "no2" = "blue", "so2" = "green")) +
+  theme_minimal() +
+  theme(
+    legend.position = "top",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+## Conclusion
