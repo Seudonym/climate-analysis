@@ -99,6 +99,19 @@ ui <- fluidPage(
                         verbatimTextOutput("radiationEvapSummary")
                  )
                ),
+      ),
+      
+      tabPanel("Air Quality Analysis",
+               br(),
+               selectInput("airNormMethod", "Normalization Method:",
+                           choices = c("None" = "none", 
+                                       "Z-Score (scale)" = "zscore", 
+                                       "Min-Max (0-1)" = "minmax"),
+                           selected = "none"),
+               plotOutput("airPlot", height = "500px"),
+               br(),
+               h4("Air Quality Data Summary"),
+               verbatimTextOutput("airSummary")
       )
     )
   )
@@ -137,11 +150,11 @@ server <- function(input, output, session) {
     lon <- selected_location()[2]
     start_date <- format(input$dateRange[1], "%Y-%m-%d")
     end_date <- format(input$dateRange[2], "%Y-%m-%d")
-    hourly_vars <- paste(input$airVariables, collapse = ",")
+    air_vars <- "pm10,carbon_monoxide,carbon_dioxide,sulphur_dioxide,dust"
     tz <- input$timezone
     
-    if (as.numeric(substr(start_date, 1, 4)) < 2014) {
-      start_date <- "2014-01-01"
+    if (as.numeric(substr(start_date, 1, 4)) < 2023) {
+      start_date <- "2022-07-01"
     }
   
     paste0(
@@ -150,7 +163,7 @@ server <- function(input, output, session) {
       "&longitude=", lon,
       "&start_date=", start_date,
       "&end_date=", end_date,
-      "&hourly=", hourly_vars,
+      "&hourly=", air_vars,
       "&timezone=", tz,
       "&domains=cams_global"
     )
@@ -195,6 +208,30 @@ server <- function(input, output, session) {
     print(df)
     
     return(df)
+  })
+  
+  air_df <- reactive({
+    req(airquality_data())
+    data <- airquality_data()
+    df <- data.frame(data$hourly)
+    df$time <- as.Date(df$time)
+
+    df %>% drop_na()
+    
+    if(input$airNormMethod != "none" && ncol(df) > 1) {
+      numeric_cols <- setdiff(names(df), "time")
+      if(input$airNormMethod == "zscore") {
+        df[numeric_cols] <- scale(df[numeric_cols])
+      } else if(input$airNormMethod == "minmax") {
+        min_max_normalize <- function(x) {
+          (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
+        }
+        df[numeric_cols] <- lapply(df[numeric_cols], min_max_normalize)
+      }
+        
+    }
+    return (df)
+    
   })
   
   ## MAP
@@ -419,6 +456,30 @@ server <- function(input, output, session) {
            lty = 1, lwd = 2)
   })
   
+  output$airPlot <- renderPlot({
+    req(air_df())
+    df <- air_df()
+    
+    # Prepare data for plotting
+    plot_df <- df %>%
+      pivot_longer(cols = -time, names_to = "pollutant", values_to = "concentration")
+    
+    # Create the plot
+    ggplot(plot_df, aes(x = time, y = concentration, color = pollutant)) +
+      geom_line() +
+      geom_point() +
+      labs(
+        title = "Air Pollutant Concentrations Over Time",
+        x = "Date",
+        y = "Concentration",
+        color = "Pollutant"
+      ) +
+      theme_minimal() +
+      theme(
+        legend.position = "top",
+        axis.text.x = element_text(angle = 45, hjust = 1)
+      )
+  })
   
   output$temperatureSummary <- renderPrint({
     req(climate_df())
@@ -523,6 +584,37 @@ server <- function(input, output, session) {
       )
     
     print(radiation_evap_summary)
+  })
+  
+  output$airSummary <- renderPrint({
+    req(air_df())
+    df <- air_df()
+    
+    # Calculate summary statistics for pollutants
+    pollutant_summary <- df %>%
+      summarise(
+        avg_carbon_monoxide = mean(carbon_monoxide, na.rm = TRUE),
+        max_carbon_monoxide = max(carbon_monoxide, na.rm = TRUE),
+        min_carbon_monoxide = min(carbon_monoxide, na.rm = TRUE),
+        
+        avg_carbon_dioxide = mean(carbon_dioxide, na.rm = TRUE),
+        max_carbon_dioxide = max(carbon_dioxide, na.rm = TRUE),
+        min_carbon_dioxide = min(carbon_dioxide, na.rm = TRUE),
+        
+        avg_sulphur_dioxide = mean(sulphur_dioxide, na.rm = TRUE),
+        max_sulphur_dioxide = max(sulphur_dioxide, na.rm = TRUE),
+        min_sulphur_dioxide = min(sulphur_dioxide, na.rm = TRUE),
+
+        avg_pm10 = mean(pm10, na.rm = TRUE),
+        max_pm10 = max(pm10, na.rm = TRUE),
+        min_pm10 = min(pm10, na.rm = TRUE),
+        
+        avg_dust = mean(dust, na.rm = TRUE),
+        max_dust = max(dust, na.rm = TRUE),
+        min_dust = min(dust, na.rm = TRUE),
+      )
+    
+    print(pollutant_summary)
   })
   
 }

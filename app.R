@@ -25,12 +25,35 @@ ui <- fluidPage(
                      end = "2023-01-01"),
       
       # Temperature variables
-      h4("Temperature Variables"),
-      checkboxGroupInput("tempVariables", "Select Temperature Variables:",
-                         choices = c("Maximum Temperature" = "temperature_2m_max", 
-                                     "Minimum Temperature" = "temperature_2m_min",
-                                     "Mean Temperature" = "temperature_2m_mean"),
-                         selected = c("temperature_2m_max", "temperature_2m_min", "temperature_2m_mean")),
+      h4("Climate Variables"),
+      checkboxGroupInput("tempVariables", "Select Climate Variables:",
+                         choices = c(
+                           # Temperature variables
+                           "Maximum Temperature" = "temperature_2m_max", 
+                           "Minimum Temperature" = "temperature_2m_min",
+                           "Mean Temperature" = "temperature_2m_mean",
+                           
+                           # Wind variables
+                           "Wind Speed (Max)" = "wind_speed_10m_max",
+                           "Wind Gusts (Max)" = "wind_gusts_10m_max",
+                           "Wind Direction (Dominant)" = "wind_direction_10m_dominant",
+                           
+                           # Precipitation variables
+                           "Precipitation Sum" = "precipitation_sum",
+                           "Rain Sum" = "rain_sum",
+                           "Snowfall Sum" = "snowfall_sum",
+                           
+                           # Radiation & Evapotranspiration
+                           "Shortwave Radiation Sum" = "shortwave_radiation_sum",
+                           "Evapotranspiration" = "et0_fao_evapotranspiration",
+                           
+                           # Duration variables
+                           "Daylight Duration" = "daylight_duration",
+                           "Sunshine Duration" = "sunshine_duration"
+                         ),
+                         selected = c("temperature_2m_max", "temperature_2m_min", "temperature_2m_mean", 
+                                      "wind_speed_10m_max", "precipitation_sum", "daylight_duration")
+      ),
       
       # Air quality variables
       h4("Air Quality Variables"),
@@ -66,14 +89,37 @@ ui <- fluidPage(
                  h4("Data Status"),
                  verbatimTextOutput("dataStatus")
         ),
-        tabPanel("Temperature Analysis",
-                 br(),
-                 selectInput("tempView", "View Type:",
-                             choices = c("Time Series", "Decomposition")),
-                 plotOutput("tempPlot", height = "500px"),
-                 br(),
-                 h4("Temperature Data Summary"),
-                 verbatimTextOutput("tempSummary")
+        tabPanel("Climate Analysis",
+                 fluidRow(
+                   column(12, 
+                          h3("Temperature Analysis"),
+                          plotOutput("temperaturePlot")
+                   )
+                 ),
+                 fluidRow(
+                   column(12, 
+                          h3("Wind Analysis"),
+                          plotOutput("windPlot")
+                   )
+                 ),
+                 fluidRow(
+                   column(12, 
+                          h3("Precipitation Analysis"),
+                          plotOutput("precipitationPlot")
+                   )
+                 ),
+                 fluidRow(
+                   column(12, 
+                          h3("Humidity Analysis"),
+                          plotOutput("humidityPlot") # If you have humidity data
+                   )
+                 ),
+                 fluidRow(
+                   column(12, 
+                          h3("Radiation & Evapotranspiration"),
+                          plotOutput("radiationPlot")
+                   )
+                 )
         ),
         tabPanel("Air Quality Analysis",
                  br(),
@@ -362,7 +408,52 @@ server <- function(input, output, session) {
       }
     }
   })
-  
+  # Wind Plot
+ # Wind Plot
+output$windPlot <- renderPlot({
+  req(climate_data())
+  ggplot(climate_data()$daily, aes(x = time)) +
+    geom_line(aes(y = wind_speed_10m_max, color = "Wind Speed")) +
+    geom_line(aes(y = wind_gusts_10m_max, color = "Wind Gusts")) +
+    labs(title = "Wind Analysis", x = "Date", y = "Wind Speed (m/s)") +
+    scale_color_manual(values = c("Wind Speed" = "blue", "Wind Gusts" = "red")) +
+    theme_minimal()
+})
+
+# Precipitation Plot
+output$precipitationPlot <- renderPlot({
+  req(climate_data())
+  ggplot(climate_data()$daily, aes(x = time)) +
+    geom_line(aes(y = precipitation_sum, color = "Precipitation")) +
+    geom_line(aes(y = rain_sum, color = "Rain")) +
+    geom_line(aes(y = snowfall_sum, color = "Snowfall")) +
+    labs(title = "Precipitation Analysis", x = "Date", y = "Amount (mm)") +
+    scale_color_manual(values = c("Precipitation" = "blue", "Rain" = "darkblue", "Snowfall" = "lightblue")) +
+    theme_minimal()
+})
+
+# Radiation & Evapotranspiration Plot
+output$radiationPlot <- renderPlot({
+  req(climate_data())
+  ggplot(climate_data()$daily, aes(x = time)) +
+    geom_line(aes(y = shortwave_radiation_sum, color = "Radiation")) +
+    geom_line(aes(y = et0_fao_evapotranspiration, color = "Evapotranspiration")) +
+    labs(title = "Radiation & Evapotranspiration", x = "Date", y = "Value") +
+    scale_color_manual(values = c("Radiation" = "orange", "Evapotranspiration" = "green")) +
+    theme_minimal()
+})
+
+# Duration Plot (for daylight and sunshine)
+output$durationPlot <- renderPlot({
+  req(climate_data())
+  ggplot(climate_data()$daily, aes(x = time)) +
+    geom_line(aes(y = daylight_duration, color = "Daylight")) +
+    geom_line(aes(y = sunshine_duration, color = "Sunshine")) +
+    labs(title = "Daylight & Sunshine Duration", x = "Date", y = "Duration (hours)") +
+    scale_color_manual(values = c("Daylight" = "gold", "Sunshine" = "orange")) +
+    theme_minimal()
+})
+
 
   output$airPlot <- renderPlot({
     req(air_df())
@@ -426,3 +517,4 @@ server <- function(input, output, session) {
 
 
 shinyApp(ui = ui, server = server)
+

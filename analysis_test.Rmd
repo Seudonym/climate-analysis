@@ -47,7 +47,7 @@ return(data)
 
 We later make these URLs modifiable directly from the UI.
 ```{r}
-climate_url <- "https://archive-api.open-meteo.com/v1/archive?latitude=23&longitude=25&start_date=1980-01-01&end_date=2025-01-01&hourly=apparent_temperature&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_sum"
+climate_url <- "https://archive-api.open-meteo.com/v1/archive?latitude=52.52&longitude=13.41&start_date=2025-02-24&end_date=2025-03-10&daily=daylight_duration,sunshine_duration,precipitation_sum,rain_sum,snowfall_sum,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,shortwave_radiation_sum,et0_fao_evapotranspiration,temperature_2m_max,temperature_2m_min,temperature_2m_mean"
 airquality_url <- "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=25&longitude=77&hourly=carbon_monoxide,carbon_dioxide,nitrogen_dioxide,sulphur_dioxide,methane&timezone=GMT&start_date=2013-01-01&end_date=2025-01-01&domains=cams_global"
 ```
 
@@ -60,12 +60,16 @@ airquality_data <- get_data(airquality_url)
 ## Data Cleaning and Transformation
 Here we extract specific variables from the API responses and organize them into structured data frames. For temperature data, we extract maximum, minimum, and mean daily temperatures along with dates. For air quality data, we extract concentrations of carbon monoxide (CO), methane (CH4), carbon dioxide (CO2), nitrogen dioxide (NO2), and sulfur dioxide (SO2). 
 
+I want the temperature analysis tab to be called climate analysis, and it should show plots for each value like temperature, wind, humidity and so on. They should be similar to temp plot, as it shows max min and  mean on one.
+
 The air quality data is downsampled to daily measurements by selecting every 24th hourly record.
 ```{r}
 temp_max <- climate_data$daily$temperature_2m_max
 temp_min <- climate_data$daily$temperature_2m_min
 temp_mean <- climate_data$daily$temperature_2m_mean
 date <- as.Date(climate_data$daily$time)
+
+names(climate_data$daily)
 
 temp_df <- data.frame(
 date,
